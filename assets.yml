@@ -1,8 +1,19 @@
-# All these assets will be created in assets.cpp, which CMake will
-# link automagically.
-# References can be picked up by including assets.hpp
-
+# Define an output target for the asset builder
+# in this case we want a CSource (and implicitly also a header file)
+# type auto-detection will notice the ".cpp" and act accordingly
 assets.cpp:
-  assets/no-image.png:
-    name: asset_no_image
+  prefix: asset_
+  # Include assets/sprites.png
+  # and place it in a variable named "sprites"
+  # Since it ends in ".png" the builder will run "sprites_packed" to convert our source file
+  assets/sprites.png:
+    name: sprites
+    palette: assets/sprites.act
+    strict: true  # Fail if a colour does not exist in the palette
+    transparent: 255,0,255
 
+  # Include assets/level.tmx
+  # and place it in a variable named "level"
+  # Since it ends in ".tmx" the builder will run "map_tiled" to convert our source file
+  assets/level*.tmx:
+    name:

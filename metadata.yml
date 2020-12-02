@@ -1,9 +1,9 @@
-title: game title
-description: game description
-author: you
+title: Rocks And Diamonds
+description: A classic game of rock-dodging, boulder-dashing action.
+author: Gadgetoid
 splash:
-  file: assets/no-image.png
+  file: assets/splash.png
 icon:
-  file: assets/no-icon.png
+  file: assets/icon.png
 version: v0.0.1
 

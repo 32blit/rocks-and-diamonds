@@ -1,9 +1,9 @@
 # Basic parameters; check that these match your project / environment
 cmake_minimum_required(VERSION 3.8)
 
-project(game)
+project(rocks-and-diamonds)
 set(32BLIT_PATH "../" CACHE PATH "Path to 32blit.cmake")
-set(PROJECT_SOURCE game.cpp game.hpp)
+set(PROJECT_SOURCE rocks-and-diamonds.cpp rocks-and-diamonds.hpp)
 
 # Build configuration; approach this with caution!
 if(NOT EXISTS ${32BLIT_PATH}/32blit.cmake)
