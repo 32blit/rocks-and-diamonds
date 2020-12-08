@@ -5,6 +5,9 @@ project(rocks-and-diamonds)
 set(32BLIT_PATH "../" CACHE PATH "Path to 32blit.cmake")
 set(PROJECT_SOURCE rocks-and-diamonds.cpp rocks-and-diamonds.hpp)
 
+install(FILES LICENSE DESTINATION bin)
+install(FILES README.md DESTINATION bin)
+
 # Build configuration; approach this with caution!
 if(NOT EXISTS ${32BLIT_PATH}/32blit.cmake)
   message(FATAL_ERROR "Define location of 32Blit API with -D32BLIT_PATH=<path to 32blit.cmake>")
