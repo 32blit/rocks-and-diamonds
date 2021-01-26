@@ -18,6 +18,11 @@ constexpr uint16_t screen_height = 120;
 constexpr uint16_t level_width = 64;
 constexpr uint16_t level_height = 64;
 
+const void* levels[] = {
+  &asset_assets_level01_tmx,
+  &asset_assets_level02_tmx
+};
+
 uint8_t *level_data;
 
 Timer timer_level_update;
@@ -35,6 +40,7 @@ struct TMX {
   uint16_t width;
   uint16_t height;
   uint16_t layers;
+  uint8_t data[];
 };
 #pragma pack(pop)
 
@@ -276,19 +282,22 @@ void update_level(Timer &timer) {
 }
 
 void new_game(uint32_t level) {
-  // Load the level data from the linked binary blob into memory
-  //memcpy((void *)level_data, (const void *)asset_level, level_width * level_height);
+  // Get a pointer to the map header
+  TMX *tmx = (TMX *)levels[level];
 
-  TMX *tmx = (TMX *)&asset_assets_level01_tmx;
-
+  // Bail if the map is oversized
   if(tmx->width > level_width) return;
   if(tmx->height > level_height) return;
 
+  // Clear the level data
+  memset(level_data, 0, level_width * level_height);
+
+  // Load the level data from the map memory
   for(auto x = 0u; x < tmx->width; x++) {
     for(auto y = 0u; y < tmx->height; y++) {
-      auto src = y * tmx->width + x + sizeof(TMX);
+      auto src = y * tmx->width + x;
       auto dst = y * level_width + x;
-      level_data[dst] = asset_assets_level01_tmx[src];
+      level_data[dst] = tmx->data[src];
     }
   }
 
