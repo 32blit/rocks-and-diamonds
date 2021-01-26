@@ -17,3 +17,5 @@ assets.cpp:
   # Since it ends in ".tmx" the builder will run "map_tiled" to convert our source file
   assets/level*.tmx:
     name:
+    empty_tile: 0
+    output_struct: true

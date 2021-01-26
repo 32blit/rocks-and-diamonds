@@ -28,6 +28,16 @@ struct Feedback {
   bool rock_thunk;
 };
 
+#pragma pack(push,1)
+struct TMX {
+  char head[4];
+  uint8_t empty_tile;
+  uint16_t width;
+  uint16_t height;
+  uint16_t layers;
+};
+#pragma pack(pop)
+
 struct Player {
   Point start;
   Point position;
@@ -268,9 +278,20 @@ void update_level(Timer &timer) {
 void new_game(uint32_t level) {
   // Load the level data from the linked binary blob into memory
   //memcpy((void *)level_data, (const void *)asset_level, level_width * level_height);
-  for(auto x = 0; x < 64 * 64; x++){
-    level_data[x] = asset_assets_level01_tmx[x];
+
+  TMX *tmx = (TMX *)&asset_assets_level01_tmx;
+
+  if(tmx->width > level_width) return;
+  if(tmx->height > level_height) return;
+
+  for(auto x = 0u; x < tmx->width; x++) {
+    for(auto y = 0u; y < tmx->height; y++) {
+      auto src = y * tmx->width + x + sizeof(TMX);
+      auto dst = y * level_width + x;
+      level_data[dst] = asset_assets_level01_tmx[src];
+    }
   }
+
   player.start = level_first(PLAYER);
   level_set(player.start, NOTHING);
   player.position = player.start;
