@@ -43,7 +43,7 @@ jobs:
           - os: windows-latest
             name: Visual Studio
             release-suffix: WIN64
-            cmake-args: -D32BLIT_PATH=$GITHUB_WORKSPACE/32blit
+            cmake-args: -D32BLIT_PATH=$GITHUB_WORKSPACE/32blit -DSDL2_DIR=$GITHUB_WORKSPACE/32blit/vs/sdl
 
     runs-on: ${{matrix.os}}
 
