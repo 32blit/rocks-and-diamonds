@@ -33,17 +33,6 @@ struct Feedback {
   bool rock_thunk;
 };
 
-#pragma pack(push,1)
-struct TMX {
-  char head[4];
-  uint8_t empty_tile;
-  uint16_t width;
-  uint16_t height;
-  uint16_t layers;
-  uint8_t data[];
-};
-#pragma pack(pop)
-
 struct Player {
   Point start;
   Point position;
