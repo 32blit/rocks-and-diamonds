@@ -12,9 +12,6 @@ using namespace blit;
 #define PLAYER_RIGHT (player.position.x + player.size.x)
 #define PLAYER_LEFT (player.position.x)
 
-constexpr uint16_t screen_width = 160;
-constexpr uint16_t screen_height = 120;
-
 constexpr uint16_t level_width = 64;
 constexpr uint16_t level_height = 64;
 
@@ -92,23 +89,26 @@ enum entityType {
 // Line-interrupt callback for level->draw that applies our camera transformation
 // This can be expanded to add effects like camera shake, wavy dream-like stuff, all the fun!
 std::function<Mat3(uint8_t)> level_line_interrupt_callback = [](uint8_t y) -> Mat3 {
+  (void)y; // Camera is updated elsewhere and is scanline-independent
   return camera;
 };
 
 void update_camera(uint32_t time) {
+  (void)time;
+
   static uint32_t thunk_a_bunch = 0;
   // Create a camera transform that centers around the player's position
   if(player.camera.x < player.position.x) {
-    player.camera.x += 0.1;
+    player.camera.x += 0.1f;
   }
   if(player.camera.x > player.position.x) {
-    player.camera.x -= 0.1;
+    player.camera.x -= 0.1f;
   }
   if(player.camera.y < player.position.y) {
-    player.camera.y += 0.1;
+    player.camera.y += 0.1f;
   }
   if(player.camera.y > player.position.y) {
-    player.camera.y -= 0.1;
+    player.camera.y -= 0.1f;
   }
 
   if(feedback.rock_thunk) {
@@ -118,7 +118,7 @@ void update_camera(uint32_t time) {
 
   camera = Mat3::identity();
   camera *= Mat3::translation(Vec2(player.camera.x * 8.0f, player.camera.y * 8.0f)); // offset to middle of world
-  camera *= Mat3::translation(Vec2(-screen_width / 2, -screen_height / 2)); // transform to centre of framebuffer
+  camera *= Mat3::translation(Vec2(-screen.bounds.w / 2, -screen.bounds.h / 2)); // transform to centre of framebuffer
 
   if(thunk_a_bunch){
     camera *= Mat3::translation(Vec2(
@@ -173,10 +173,11 @@ void level_set(Point location, entityType entity, bool not_nothing) {
 }
 
 void animate_level(Timer &timer) {
+  (void)timer;
+
   Point location = Point(0, 0);
   for(location.y = level_height - 1; location.y > -1; location.y--) {
     for(location.x = 0; location.x < level_width + 1; location.x++) {
-      Point location_below = location + Point(0, 1);
       entityType current = level_get(location);
 
       if(current == DIRT_ANIM_4) {
@@ -215,6 +216,8 @@ void animate_level(Timer &timer) {
 }
 
 void update_level(Timer &timer) {
+  (void)timer;
+
   Point location = Point(0, 0);
   for(location.y = level_height - 1; location.y > 0; location.y--) {
     for(location.x = 0; location.x < level_width; location.x++) {
@@ -298,7 +301,7 @@ void new_game(uint32_t level) {
   player.score = 0;
   player.dead = false;
 
-  player.screen_location = Point(screen_width / 2, screen_height / 2);
+  player.screen_location = Point(screen.bounds.w / 2, screen.bounds.h / 2);
   player.screen_location += Point(1, 1);
 }
 
@@ -306,7 +309,7 @@ void init() {
   set_screen_mode(ScreenMode::lores);
 
   // Load the spritesheet from the linked binary blob
-  screen.sprites = SpriteSheet::load(asset_sprites);
+  screen.sprites = Surface::load(asset_sprites);
 
   // Allocate memory for the writeable copy of the level
   level_data = (uint8_t *)malloc(level_width * level_height);
@@ -323,7 +326,9 @@ void init() {
   new_game(0);
 }
 
-void render(uint32_t time_ms) {
+void render(uint32_t time) {
+  (void)time;
+
   screen.pen = Pen(0, 0, 0);
   screen.clear();
 
@@ -337,48 +342,44 @@ void render(uint32_t time_ms) {
 
   // Draw the header bar
   screen.pen = Pen(255, 255, 255);
-  screen.rectangle(Rect(0, 0, screen_width, 10));
+  screen.rectangle(Rect(0, 0, screen.bounds.w, 10));
   screen.pen = Pen(0, 0, 0);
   screen.text("Level: " + std::to_string(player.level) + " Score: " + std::to_string(player.score), minimal_font, Point(2, 2));
 
   if(player.has_key) {
-    screen.sprite(entityType::KEY_SILVER, Point(screen_width - 10, 1));
+    screen.sprite(entityType::KEY_SILVER, Point(screen.bounds.w - 10, 1));
   }
   // screen.text(std::to_string(player.position.x), minimal_font, Point(0, 0));
   // screen.text(std::to_string(player.position.y), minimal_font, Point(0, 10));
 }
 
 void update(uint32_t time) {
-  static uint32_t last_buttons = 0;
-  static uint32_t last_repeat = 0;
-  static uint32_t changed = 0;
+  (void)time;
 
   Point movement = Point(0, 0);
 
-  changed = buttons ^ last_buttons;
-
-  if(buttons & changed & Button::B) {
+  if(buttons.pressed & Button::B) {
     new_game(player.level);
   }
 
-  if(buttons & changed & Button::A) {
+  if(buttons.pressed & Button::A) {
     if(level_get(player.position + Point(0, 1)) == NOTHING) {
       level_set(player.position + Point(0, 1), BOMB_ANIM_1);
     }
   }
 
   if(!player.dead) {
-    if(buttons & changed & Button::DPAD_UP) {
+    if(buttons.pressed & Button::DPAD_UP) {
       movement.y = -1;
     }
-    if(buttons & changed & Button::DPAD_DOWN) {
+    if(buttons.pressed & Button::DPAD_DOWN) {
       movement.y = 1;
     }
-    if(buttons & changed & Button::DPAD_LEFT) {
+    if(buttons.pressed & Button::DPAD_LEFT) {
       player.facing = false;
       movement.x = -1;
     }
-    if(buttons & changed & Button::DPAD_RIGHT) {
+    if(buttons.pressed & Button::DPAD_RIGHT) {
       player.facing = true;
       movement.x = 1;
     }
@@ -432,8 +433,6 @@ void update(uint32_t time) {
         break;
     }
   }
-
-  last_buttons = buttons;
 
   update_camera(time);
 }
