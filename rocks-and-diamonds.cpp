@@ -88,7 +88,7 @@ enum entityType {
 
 // Line-interrupt callback for level->draw that applies our camera transformation
 // This can be expanded to add effects like camera shake, wavy dream-like stuff, all the fun!
-std::function<Mat3(uint8_t)> level_line_interrupt_callback = [](uint8_t y) -> Mat3 {
+Mat3 level_line_interrupt_callback(uint8_t y) {
   (void)y; // Camera is updated elsewhere and is scanline-independent
   return camera;
 };
