@@ -1,6 +1,9 @@
 # Basic parameters; check that these match your project / environment
 cmake_minimum_required(VERSION 3.8)
 
+# Wrapper for the Pico SDK, which is only included if PICO_BOARD is set
+include(${32BLIT_DIR}/32blit-pico/sdk_import.cmake)
+
 project(rocks-and-diamonds)
 set(PROJECT_SOURCE rocks-and-diamonds.cpp rocks-and-diamonds.hpp)
 set(PROJECT_DISTRIBS LICENSE README.md)
