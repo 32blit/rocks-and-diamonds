@@ -12,8 +12,17 @@ using namespace blit;
 #define PLAYER_RIGHT (player.position.x + player.size.x)
 #define PLAYER_LEFT (player.position.x)
 
-constexpr uint16_t level_width = 64;
-constexpr uint16_t level_height = 64;
+const Point P_LEFT(-1, 0);
+const Point P_RIGHT(1, 0);
+const Point P_BELOW(0, 1);
+const Point P_ABOVE(0, -1);
+
+const Point P_ALEFT = P_LEFT + P_ABOVE;
+const Point P_ARIGHT = P_RIGHT + P_ABOVE;
+const Point P_BLEFT = P_LEFT + P_BELOW;
+const Point P_BRIGHT = P_RIGHT + P_BELOW;
+
+const Size LEVEL_SIZE(64, 64);
 
 const void* levels[] = {
   &asset_assets_level01_tmx,
@@ -133,9 +142,9 @@ void update_camera(uint32_t time) {
 }
 
 Point level_first(entityType entity) {
-  for(auto x = 0; x < level_width; x++) {
-    for(auto y = 0; y < level_height; y++) {
-      if (level_data[y * level_width + x] == entity) {
+  for(auto x = 0; x < LEVEL_SIZE.w; x++) {
+    for(auto y = 0; y < LEVEL_SIZE.h; y++) {
+      if (level_data[y * LEVEL_SIZE.w + x] == entity) {
         return Point(x, y);
       } 
     }
@@ -144,7 +153,7 @@ Point level_first(entityType entity) {
 }
 
 void level_set(Point location, entityType entity) {
-  level_data[location.y * level_width + location.x] = entity;
+  level_data[location.y * LEVEL_SIZE.w + location.x] = entity;
 }
 
 bool player_at(Point location) {
@@ -152,10 +161,11 @@ bool player_at(Point location) {
 }
 
 entityType level_get(Point location) {
-  if(location.y < 0 || location.x < 0 || location.y >= level_height || location.x >= level_width) {
+  static Rect level_bounds(Point(0, 0), LEVEL_SIZE);
+  if(!level_bounds.contains(location)) {
     return WALL;
   }
-  entityType entity = (entityType)level_data[location.y * level_width + location.x];
+  entityType entity = (entityType)level_data[location.y * LEVEL_SIZE.w + location.x];
   if(entity == NOTHING && player_at(location)) {
     entity = PLAYER;
   }
@@ -176,8 +186,8 @@ void animate_level(Timer &timer) {
   (void)timer;
 
   Point location = Point(0, 0);
-  for(location.y = level_height - 1; location.y > -1; location.y--) {
-    for(location.x = 0; location.x < level_width + 1; location.x++) {
+  for(location.y = LEVEL_SIZE.h - 1; location.y > -1; location.y--) {
+    for(location.x = 0; location.x < LEVEL_SIZE.w + 1; location.x++) {
       entityType current = level_get(location);
 
       if(current == DIRT_ANIM_4) {
@@ -202,14 +212,14 @@ void animate_level(Timer &timer) {
         level_set(location, BOMB_ANIM_6);
       } else if(current == BOMB_ANIM_6) {
         level_set(location, NOTHING);
-        level_set(location + Point(0, 1), DIRT_ANIM_1, true);
-        level_set(location + Point(0, -1), DIRT_ANIM_1, true);
-        level_set(location + Point(1, 0), DIRT_ANIM_1, true);
-        level_set(location + Point(-1, 0), DIRT_ANIM_1, true);
-        level_set(location + Point(1, 1), DIRT_ANIM_1, true);
-        level_set(location + Point(-1, -1), DIRT_ANIM_1, true);
-        level_set(location + Point(-1, 1), DIRT_ANIM_1, true);
-        level_set(location + Point(1, -1), DIRT_ANIM_1, true);
+        level_set(location + P_BELOW, DIRT_ANIM_1, true);
+        level_set(location + P_ABOVE, DIRT_ANIM_1, true);
+        level_set(location + P_RIGHT, DIRT_ANIM_1, true);
+        level_set(location + P_LEFT, DIRT_ANIM_1, true);
+        level_set(location + P_BRIGHT, DIRT_ANIM_1, true);
+        level_set(location + P_ARIGHT, DIRT_ANIM_1, true);
+        level_set(location + P_BLEFT, DIRT_ANIM_1, true);
+        level_set(location + P_ALEFT, DIRT_ANIM_1, true);
       }
     }
   }
@@ -219,9 +229,9 @@ void update_level(Timer &timer) {
   (void)timer;
 
   Point location = Point(0, 0);
-  for(location.y = level_height - 1; location.y > 0; location.y--) {
-    for(location.x = 0; location.x < level_width; location.x++) {
-      Point location_below = location + Point(0, 1);
+  for(location.y = LEVEL_SIZE.h - 1; location.y > 0; location.y--) {
+    for(location.x = 0; location.x < LEVEL_SIZE.w; location.x++) {
+      Point location_below = location + P_BELOW;
       entityType current = level_get(location);
       entityType below = level_get(location_below);
 
@@ -234,7 +244,7 @@ void update_level(Timer &timer) {
 
             if(check_entity == ROCK) {
               // Add a little *THUNK* effect for rocks falling directly down
-              Point location_land = location_below + Point(0, 1);
+              Point location_land = location_below + P_BELOW;
               switch (level_get(location_land)) {
                 case WALL:
                   feedback.rock_thunk = true;
@@ -253,10 +263,10 @@ void update_level(Timer &timer) {
           } else if (below == ROCK || below == DIAMOND) {
             // If the space below is a rock or a diamond, check to the left/right
             // and "roll" down the stack
-            entityType left = level_get(location + Point(-1, 0));
-            entityType below_left = level_get(location + Point(-1, 1));
-            entityType right = level_get(location + Point(1, 0));
-            entityType below_right = level_get(location + Point(1, 1));
+            entityType left = level_get(location + P_LEFT);
+            entityType below_left = level_get(location + P_BLEFT);
+            entityType right = level_get(location + P_RIGHT);
+            entityType below_right = level_get(location + P_BRIGHT);
 
             if(left == NOTHING && below_left == NOTHING){
               level_set(location, NOTHING);
@@ -278,17 +288,17 @@ void new_game(uint32_t level) {
   TMX *tmx = (TMX *)levels[level];
 
   // Bail if the map is oversized
-  if(tmx->width > level_width) return;
-  if(tmx->height > level_height) return;
+  if(tmx->width > LEVEL_SIZE.w) return;
+  if(tmx->height > LEVEL_SIZE.h) return;
 
   // Clear the level data
-  memset(level_data, 0, level_width * level_height);
+  memset(level_data, 0, LEVEL_SIZE.area());
 
   // Load the level data from the map memory
   for(auto x = 0u; x < tmx->width; x++) {
     for(auto y = 0u; y < tmx->height; y++) {
       auto src = y * tmx->width + x;
-      auto dst = y * level_width + x;
+      auto dst = y * LEVEL_SIZE.w + x;
       level_data[dst] = tmx->data[src];
     }
   }
@@ -296,7 +306,7 @@ void new_game(uint32_t level) {
   player.start = level_first(PLAYER);
   level_set(player.start, NOTHING);
   player.position = player.start;
-  player.camera = Vec2(player.position.x, player.position.y);
+  player.camera = Vec2(player.position);
   player.has_key = false;
   player.score = 0;
   player.dead = false;
@@ -312,10 +322,10 @@ void init() {
   screen.sprites = Surface::load(asset_sprites);
 
   // Allocate memory for the writeable copy of the level
-  level_data = (uint8_t *)malloc(level_width * level_height);
+  level_data = (uint8_t *)malloc(LEVEL_SIZE.area());
 
   // Load our level data into the TileMap
-  level = new TileMap((uint8_t *)level_data, nullptr, Size(level_width, level_height), screen.sprites);
+  level = new TileMap((uint8_t *)level_data, nullptr, Size(LEVEL_SIZE.w, LEVEL_SIZE.h), screen.sprites);
   
   timer_level_update.init(update_level, 250, -1);
   timer_level_update.start();
