@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<map version="1.4" tiledversion="1.4.3" orientation="orthogonal" renderorder="right-down" width="8" height="8" tilewidth="8" tileheight="8" infinite="0" nextlayerid="2" nextobjectid="1">
+ <tileset firstgid="1" source="sprites.tsx"/>
+ <layer id="1" name="Tile Layer 1" width="8" height="8">
+  <data encoding="csv">
+3,3,3,3,3,3,3,3,
+3,49,2,2,2,2,17,3,
+3,2,2,18,18,18,18,3,
+3,17,3,3,3,3,18,3,
+3,33,3,2,5,3,18,3,
+3,2,3,2,18,3,18,3,
+3,2,2,2,18,18,18,3,
+3,3,3,3,3,3,3,3
+</data>
+ </layer>
+</map>

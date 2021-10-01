@@ -25,8 +25,10 @@ const Point P_BRIGHT = P_RIGHT + P_BELOW;
 const Size LEVEL_SIZE(64, 64);
 
 const void* levels[] = {
+  &asset_assets_level00_tmx,
   &asset_assets_level01_tmx,
-  &asset_assets_level02_tmx
+  &asset_assets_level02_tmx,
+  &asset_assets_level03_tmx
 };
 
 uint8_t *level_data;
