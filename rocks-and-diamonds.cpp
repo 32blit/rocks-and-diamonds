@@ -39,7 +39,7 @@ TileMap* level;
 
 struct Feedback {
   bool rock_thunk;
-};
+} feedback;
 
 struct Player {
   Point start;
@@ -52,11 +52,36 @@ struct Player {
   bool has_key;
   uint32_t level;
   bool dead;
-};
+} player;
 
-Player player;
+struct GameSaveData {
+    uint8_t currentLevel;
+} gameSaveData;
 
-Feedback feedback;
+struct LastButtonPress {
+  uint32_t DPAD_UP;
+  uint32_t DPAD_DOWN;
+  uint32_t DPAD_LEFT;
+  uint32_t DPAD_RIGHT;
+  uint32_t A;
+  uint32_t B;
+  uint32_t X;
+  uint32_t Y;
+} lastButtonPress;
+
+struct CurrentButtonPress {
+  uint32_t DPAD_UP;
+  uint32_t DPAD_DOWN;
+  uint32_t DPAD_LEFT;
+  uint32_t DPAD_RIGHT;
+  uint32_t A;
+  uint32_t B;
+  uint32_t X;
+  uint32_t Y;
+} currentButtonPress;
+
+uint32_t repeat_time = 200; // in ms
+uint32_t hold_time = 500; // in ms
 
 Mat3 camera;
 
@@ -315,9 +340,20 @@ void new_game(uint32_t level) {
 
   player.screen_location = Point(screen.bounds.w / 2, screen.bounds.h / 2);
   player.screen_location += Point(1, 1);
+
+  gameSaveData.currentLevel = level;
+  write_save(gameSaveData);
 }
 
 void init() {
+  bool success = read_save(gameSaveData);
+  if (success) {
+    if (gameSaveData.currentLevel > sizeof(levels) -1) { // cheater!
+      gameSaveData.currentLevel = 0;
+    }
+    player.level = gameSaveData.currentLevel;
+  }
+
   set_screen_mode(ScreenMode::lores);
 
   // Load the spritesheet from the linked binary blob
@@ -335,7 +371,7 @@ void init() {
   timer_level_animate.init(animate_level, 100, -1);
   timer_level_animate.start();
 
-  new_game(0);
+  new_game(player.level);
 }
 
 void render(uint32_t time) {
@@ -371,29 +407,64 @@ void update(uint32_t time) {
   Point movement = Point(0, 0);
 
   if(buttons.pressed & Button::B) {
+    lastButtonPress.B = currentButtonPress.B; currentButtonPress.B = time;
     new_game(player.level);
   }
 
-  if(buttons.pressed & Button::A) {
-    if(level_get(player.position + Point(0, 1)) == NOTHING) {
-      level_set(player.position + Point(0, 1), BOMB_ANIM_1);
+  if(buttons & Button::B) {
+    if ((time - currentButtonPress.B) == hold_time) {
+      player.level = 0;
+      new_game(player.level);
     }
   }
 
   if(!player.dead) {
+    if(buttons.pressed & Button::A) {
+      if(level_get(player.position + Point(0, 1)) == NOTHING) {
+        level_set(player.position + Point(0, 1), BOMB_ANIM_1);
+      }
+    }
     if(buttons.pressed & Button::DPAD_UP) {
+      lastButtonPress.DPAD_UP = currentButtonPress.DPAD_UP; currentButtonPress.DPAD_UP = time;
       movement.y = -1;
     }
     if(buttons.pressed & Button::DPAD_DOWN) {
+      lastButtonPress.DPAD_DOWN = currentButtonPress.DPAD_DOWN; currentButtonPress.DPAD_DOWN = time;
       movement.y = 1;
     }
     if(buttons.pressed & Button::DPAD_LEFT) {
+      lastButtonPress.DPAD_LEFT = currentButtonPress.DPAD_LEFT; currentButtonPress.DPAD_LEFT = time;
       player.facing = false;
       movement.x = -1;
     }
     if(buttons.pressed & Button::DPAD_RIGHT) {
+      lastButtonPress.DPAD_RIGHT = currentButtonPress.DPAD_RIGHT; currentButtonPress.DPAD_RIGHT =time;
       player.facing = true;
       movement.x = 1;
+    }
+
+    // repeat a`la classic boulder dash
+    if(buttons & Button::DPAD_UP) {
+      if ((time - currentButtonPress.DPAD_UP) % repeat_time == 0) {
+        movement.y = -1;
+      }
+    }
+    if(buttons & Button::DPAD_DOWN) {
+      if ((time - currentButtonPress.DPAD_DOWN) % repeat_time == 0) {
+        movement.y = 1;
+      }
+    }
+    if(buttons & Button::DPAD_LEFT) {
+      if ((time - currentButtonPress.DPAD_LEFT) % repeat_time == 0) {
+        player.facing = false;
+        movement.x = -1;
+      }
+    }
+    if(buttons & Button::DPAD_RIGHT) {
+      if ((time - currentButtonPress.DPAD_RIGHT) % repeat_time == 0) {
+        player.facing = true;
+        movement.x = 1;
+      }      
     }
 
     player.position += movement;
