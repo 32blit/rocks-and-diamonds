@@ -240,14 +240,6 @@ void update_entities() {
       }
       entity.level_position += entity.velocity;
     } else {
-      if(entity.type == DIAMOND) {
-        Rect b = Rect(player.position * 8, Size(7, ));
-        if(a.intersects(b)) {
-          player.score += 1;
-          entity.type = NOTHING;
-        }
-        continue;
-      }
       if(entity.type == ROCK) {
         // Land on whatever is beneath, and *thunk*
         if(entity.velocity.y > 0) {
@@ -555,6 +547,29 @@ void update(uint32_t time) {
     player.position += movement;
 
     entityType standing_on = level_get(player.position);
+
+    for(auto &entity : entities) {
+      Point pos = entity.level_position / 8;
+      if(entity.type == ROCK){
+        if(pos == player.position) {
+          if(movement.y == 0) {
+            entityType next = level_get(player.position + movement);
+            if(next == NOTHING) {
+              entity.level_position = (player.position + movement) * 8;
+            } else {
+              player.position -= movement; // Cancel movement
+            }
+          } else {
+            player.position -= movement; // Cancel movement
+          }
+        }
+      } else if (entity.type == DIAMOND){
+        if(pos == player.position) {
+          entity.type = NOTHING;
+          player.score++;
+        }
+      }
+    }
 
     switch(standing_on) {
       case WALL:
