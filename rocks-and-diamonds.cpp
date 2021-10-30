@@ -122,6 +122,9 @@ enum entityType {
   BOMB_ANIM_4 = 0x63,
   BOMB_ANIM_5 = 0x64,
   BOMB_ANIM_6 = 0x65,
+
+  // For transitioning rocks/jewels (from one tile to the next)
+  BLOCKED = 0x66,
 };
 
 struct FallingObject {
@@ -249,12 +252,14 @@ void update_rocks(Timer &timer) {
           fallingObject.tick = leveltick + 1;
           fallingObjects.push_back(fallingObject);
           // now remove it from map
-          level_set(location, entityType::NOTHING);
+          level_set(location, entityType::BLOCKED);
+          level_set(location + Point(0, 1), entityType::BLOCKED);
         }
       }
     }
   } else if (leveltick == 7) { // resume normal level logic
     for (auto& fallingObject : fallingObjects) {
+            level_set(fallingObject.level_position, entityType::NOTHING);
             level_set(fallingObject.level_position + Point(0, 1), fallingObject.type);
             if(fallingObject.type == entityType::ROCK) {
               // Add a little *THUNK* effect for rocks falling directly down
@@ -447,8 +452,6 @@ void render(uint32_t time) {
   offset.y -= round(camera.v12);
   for (auto fallingObject : fallingObjects) {
     Point pos = fallingObject.level_position - player.position;
-    screen.pen = {255, 0, 0};
-    // screen.rectangle(Rect(offset + pos * 8, Size(8, 8)));
     screen.sprite(fallingObject.type, offset + (pos * 8) + Point(0, fallingObject.tick));
   }
 
@@ -466,8 +469,6 @@ void render(uint32_t time) {
   if(player.has_key) {
     screen.sprite(entityType::KEY_SILVER, Point(screen.bounds.w - 10, 1));
   }
-  // screen.text(std::to_string(player.position.x), minimal_font, Point(0, 0));
-  // screen.text(std::to_string(player.position.y), minimal_font, Point(0, 10));
 }
 
 void update(uint32_t time) {
@@ -544,6 +545,9 @@ void update(uint32_t time) {
     entityType standing_on = level_get(player.position);
 
     switch(standing_on) {
+      case BLOCKED:
+        player.position -= movement;
+        break;
       case WALL:
         player.position -= movement;
         break;
