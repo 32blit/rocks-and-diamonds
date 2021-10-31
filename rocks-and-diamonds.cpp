@@ -31,6 +31,8 @@ const void* levels[] = {
   &asset_assets_level03_tmx
 };
 
+constexpr uint8_t no_of_levels = sizeof(levels)/sizeof(levels[0]);
+
 uint8_t *level_data;
 
 Timer timer_level_update;
@@ -39,7 +41,7 @@ TileMap* level;
 
 struct Feedback {
   bool rock_thunk;
-};
+} feedback;
 
 struct Player {
   Point start;
@@ -52,11 +54,44 @@ struct Player {
   bool has_key;
   uint32_t level;
   bool dead;
-};
+  bool wingame;
+} player;
 
-Player player;
+struct GameSaveData {
+    uint8_t currentLevel;
+} gameSaveData;
 
-Feedback feedback;
+struct LastButtonPress {
+  uint32_t DPAD_UP;
+  uint32_t DPAD_DOWN;
+  uint32_t DPAD_LEFT;
+  uint32_t DPAD_RIGHT;
+  uint32_t A;
+  uint32_t B;
+  uint32_t X;
+  uint32_t Y;
+} lastButtonPress;
+
+struct CurrentButtonPress {
+  uint32_t DPAD_UP;
+  uint32_t DPAD_DOWN;
+  uint32_t DPAD_LEFT;
+  uint32_t DPAD_RIGHT;
+  uint32_t A;
+  uint32_t B;
+  uint32_t X;
+  uint32_t Y;
+} currentButtonPress;
+
+const uint32_t repeat_time = 150; // in ms
+
+// the unit vector points to (1,0) at 0°, (0,1) at 90° but at 45° it points to (0.71,0.71).
+// since we can't position our character in-between tiles we increase the repeat time a 
+// bit to compensate. Factor 1.414 felt choppy so I settled for 1.2.
+constexpr uint32_t diagonal_repeat_time = round(repeat_time * 1.2);
+const uint32_t hold_time = 250; // in ms
+
+auto leveltick = 0;
 
 Mat3 camera;
 
@@ -95,7 +130,18 @@ enum entityType {
   BOMB_ANIM_4 = 0x63,
   BOMB_ANIM_5 = 0x64,
   BOMB_ANIM_6 = 0x65,
+
+  // For transitioning rocks/jewels (from one tile to the next)
+  BLOCKED = 0x66,
 };
+
+struct FallingObject {
+  Point level_position;
+  entityType type;
+  uint8_t tick;
+};
+
+std::vector<FallingObject> fallingObjects;
 
 // Line-interrupt callback for level->draw that applies our camera transformation
 // This can be expanded to add effects like camera shake, wavy dream-like stuff, all the fun!
@@ -139,8 +185,6 @@ void update_camera(uint32_t time) {
     thunk_a_bunch--;
     vibration = thunk_a_bunch / 10.0f;
   }
-
-
 }
 
 Point level_first(entityType entity) {
@@ -174,6 +218,25 @@ entityType level_get(Point location) {
   return entity;
 }
 
+// get element at location without CHANGING the damn level
+entityType level_peek(Point location) {
+  uint8_t char1copy = level_data[location.y * LEVEL_SIZE.w + location.x];
+  uint8_t char2copy = level_data[(location.y + 1) * LEVEL_SIZE.w + location.x];
+
+  entityType entity1 = (entityType)char1copy;
+  entityType entity2 = (entityType)char2copy;
+
+  if (entity2 == entityType::NOTHING && player_at(location + Point(0, 1))) {
+    return entityType::NOTHING;
+  }
+
+  if (entity2 == entityType::NOTHING && (entity1 == entityType::ROCK || entity1 == entityType::DIAMOND)) {
+    return entity1;
+  } else {
+    return entityType::NOTHING;
+  }
+}
+
 void level_set(Point location, entityType entity, bool not_nothing) {
   if(not_nothing) {
     if(level_get(location) != NOTHING) {
@@ -181,6 +244,57 @@ void level_set(Point location, entityType entity, bool not_nothing) {
     }
   } else {
     level_set(location, entity);
+  }
+}
+
+void update_rocks(Timer &timer) {
+  if (leveltick == 0) { // find objects that are about to fall
+    Point location = Point(0, 0);
+    for(location.y = LEVEL_SIZE.h - 1; location.y > -1; location.y--) {
+      for(location.x = 0; location.x < LEVEL_SIZE.w + 1; location.x++) {
+        entityType current = level_peek(location);
+        if (current == ROCK || current == DIAMOND) {
+          FallingObject fallingObject;
+          fallingObject.level_position = location;
+          fallingObject.type = current;
+          fallingObject.tick = leveltick + 1;
+          fallingObjects.push_back(fallingObject);
+          // now remove it from map
+          level_set(location, entityType::BLOCKED);
+          level_set(location + Point(0, 1), entityType::BLOCKED);
+        }
+      }
+    }
+  } else if (leveltick == 7) { // resume normal level logic
+    for (auto& fallingObject : fallingObjects) {
+            level_set(fallingObject.level_position, entityType::NOTHING);
+            level_set(fallingObject.level_position + Point(0, 1), fallingObject.type);
+            if(fallingObject.type == entityType::ROCK) {
+              // Add a little *THUNK* effect for rocks falling directly down
+              Point location_land = fallingObject.level_position + Point(0, 2);
+              switch (level_get(location_land)) {
+                case WALL:
+                  feedback.rock_thunk = true;
+                  break;
+                case PLAYER:
+                  player.dead = true;
+                  feedback.rock_thunk = true;
+                  level_set(location_land, PLAYER_SQUASHED);
+                default:
+                  break;
+              }
+            }
+        }
+    fallingObjects.clear();
+    update_level(timer);
+  } else { // update falling objects
+    for (auto& fallingObject : fallingObjects) {
+      fallingObject.tick = leveltick + 1;
+    }
+  }
+  leveltick++;
+  if (leveltick > 7) {
+    leveltick = 0;
   }
 }
 
@@ -239,27 +353,7 @@ void update_level(Timer &timer) {
 
       for(entityType check_entity : {ROCK, DIAMOND}) {
         if(current == check_entity) {
-          if (below == NOTHING) {
-            // If the space underneath is empty, fall down
-            level_set(location, NOTHING);
-            level_set(location_below, check_entity);
-
-            if(check_entity == ROCK) {
-              // Add a little *THUNK* effect for rocks falling directly down
-              Point location_land = location_below + P_BELOW;
-              switch (level_get(location_land)) {
-                case WALL:
-                  feedback.rock_thunk = true;
-                  break;
-                case PLAYER:
-                  player.dead = true;
-                  feedback.rock_thunk = true;
-                  level_set(location_land, PLAYER_SQUASHED);
-                default:
-                  break;
-              }
-            }
-          } else if (below == PLAYER_SQUASHED && check_entity == ROCK) {
+          if (below == PLAYER_SQUASHED && check_entity == ROCK) {
             level_set(location, NOTHING);
             level_set(location_below, PLAYER_DEAD);
           } else if (below == ROCK || below == DIAMOND) {
@@ -312,12 +406,24 @@ void new_game(uint32_t level) {
   player.has_key = false;
   player.score = 0;
   player.dead = false;
+  player.wingame = false;
 
   player.screen_location = Point(screen.bounds.w / 2, screen.bounds.h / 2);
   player.screen_location += Point(1, 1);
+
+  gameSaveData.currentLevel = level;
+  write_save(gameSaveData);
 }
 
 void init() {
+  bool success = read_save(gameSaveData);
+  if (success) {
+    if (gameSaveData.currentLevel > no_of_levels - 1) { // cheater!
+      gameSaveData.currentLevel = 0;
+    }
+    player.level = gameSaveData.currentLevel;
+  }
+
   set_screen_mode(ScreenMode::lores);
 
   // Load the spritesheet from the linked binary blob
@@ -329,13 +435,23 @@ void init() {
   // Load our level data into the TileMap
   level = new TileMap((uint8_t *)level_data, nullptr, Size(LEVEL_SIZE.w, LEVEL_SIZE.h), screen.sprites);
   
-  timer_level_update.init(update_level, 250, -1);
+  timer_level_update.init(update_rocks, 32, -1);
   timer_level_update.start();
   
   timer_level_animate.init(animate_level, 100, -1);
   timer_level_animate.start();
 
-  new_game(0);
+  new_game(player.level);
+}
+
+bool detectDiagonal() {
+  auto dpad = buttons & 0b00001111; // get rid of abxy states
+  if (dpad == Button::DPAD_UP || dpad == Button::DPAD_DOWN || dpad == Button::DPAD_LEFT 
+      || dpad == Button::DPAD_RIGHT || dpad == 0) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 void render(uint32_t time) {
@@ -346,6 +462,17 @@ void render(uint32_t time) {
 
   // Draw our level
   level->draw(&screen, Rect(0, 0, screen.bounds.w, screen.bounds.h), level_line_interrupt_callback);
+  
+  // draw falling objects if any
+  // Point offset = player.screen_location;
+  // player.screen_location does not take into account all the camera movement
+  Point offset = player.position * 8;
+  offset.x -= floor(camera.v02);
+  offset.y -= round(camera.v12);
+  for (auto fallingObject : fallingObjects) {
+    Point pos = fallingObject.level_position - player.position;
+    screen.sprite(fallingObject.type, offset + (pos * 8) + Point(0, fallingObject.tick));
+  }
 
   // Draw our character sprite
   if(!player.dead) {
@@ -357,43 +484,85 @@ void render(uint32_t time) {
   screen.rectangle(Rect(0, 0, screen.bounds.w, 10));
   screen.pen = Pen(0, 0, 0);
   screen.text("Level: " + std::to_string(player.level) + " Score: " + std::to_string(player.score), minimal_font, Point(2, 2));
-
   if(player.has_key) {
     screen.sprite(entityType::KEY_SILVER, Point(screen.bounds.w - 10, 1));
   }
-  // screen.text(std::to_string(player.position.x), minimal_font, Point(0, 0));
-  // screen.text(std::to_string(player.position.y), minimal_font, Point(0, 10));
+  if (player.wingame) {
+    screen.pen = Pen(255, 255, 255);
+    screen.text("You ROCK!", minimal_font, Point(40, 52));
+    screen.text("Hold B for new game", minimal_font, Point(12, 68));
+  }
 }
 
 void update(uint32_t time) {
   (void)time;
 
+  auto current_repeat_time = detectDiagonal()? diagonal_repeat_time : repeat_time;
+
   Point movement = Point(0, 0);
 
+  // Restart level
   if(buttons.pressed & Button::B) {
+    lastButtonPress.B = currentButtonPress.B; currentButtonPress.B = time;
     new_game(player.level);
   }
 
-  if(buttons.pressed & Button::A) {
-    if(level_get(player.position + Point(0, 1)) == NOTHING) {
-      level_set(player.position + Point(0, 1), BOMB_ANIM_1);
+  // Restart game
+  if(buttons & Button::B) {
+    if ((time - currentButtonPress.B) == hold_time) {
+      player.level = 0;
+      new_game(player.level);
     }
   }
 
   if(!player.dead) {
+    // Throw bomb
+    if(buttons.pressed & Button::A) {
+      if(level_get(player.position + Point(0, 1)) == NOTHING) {
+        level_set(player.position + Point(0, 1), BOMB_ANIM_1);
+      }
+    }
     if(buttons.pressed & Button::DPAD_UP) {
+      lastButtonPress.DPAD_UP = currentButtonPress.DPAD_UP; currentButtonPress.DPAD_UP = time;
       movement.y = -1;
     }
     if(buttons.pressed & Button::DPAD_DOWN) {
+      lastButtonPress.DPAD_DOWN = currentButtonPress.DPAD_DOWN; currentButtonPress.DPAD_DOWN = time;
       movement.y = 1;
     }
     if(buttons.pressed & Button::DPAD_LEFT) {
+      lastButtonPress.DPAD_LEFT = currentButtonPress.DPAD_LEFT; currentButtonPress.DPAD_LEFT = time;
       player.facing = false;
       movement.x = -1;
     }
     if(buttons.pressed & Button::DPAD_RIGHT) {
+      lastButtonPress.DPAD_RIGHT = currentButtonPress.DPAD_RIGHT; currentButtonPress.DPAD_RIGHT =time;
       player.facing = true;
       movement.x = 1;
+    }
+
+    // repeat à la classic boulder dash
+    if(buttons & Button::DPAD_UP) {
+      if ((time - currentButtonPress.DPAD_UP) % current_repeat_time == 0) {
+        movement.y = -1;
+      }
+    }
+    if(buttons & Button::DPAD_DOWN) {
+      if ((time - currentButtonPress.DPAD_DOWN) % current_repeat_time == 0) {
+        movement.y = 1;
+      }
+    }
+    if(buttons & Button::DPAD_LEFT) {
+      if ((time - currentButtonPress.DPAD_LEFT) % current_repeat_time == 0) {
+        player.facing = false;
+        movement.x = -1;
+      }
+    }
+    if(buttons & Button::DPAD_RIGHT) {
+      if ((time - currentButtonPress.DPAD_RIGHT) % current_repeat_time == 0) {
+        player.facing = true;
+        movement.x = 1;
+      }      
     }
 
     player.position += movement;
@@ -401,6 +570,9 @@ void update(uint32_t time) {
     entityType standing_on = level_get(player.position);
 
     switch(standing_on) {
+      case BLOCKED:
+        player.position -= movement;
+        break;
       case WALL:
         player.position -= movement;
         break;
@@ -439,7 +611,12 @@ void update(uint32_t time) {
         break;
       case STAIRS:
         player.level++;
-        new_game(player.level);
+        if (player.level > no_of_levels - 1) {
+          player.wingame = true;
+          player.dead = true;
+        } else {
+          new_game(player.level);
+        }
         break;
       default:
         break;
