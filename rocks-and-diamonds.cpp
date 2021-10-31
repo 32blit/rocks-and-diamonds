@@ -31,6 +31,8 @@ const void* levels[] = {
   &asset_assets_level03_tmx
 };
 
+constexpr uint8_t no_of_levels = sizeof(levels)/sizeof(levels[0]);
+
 uint8_t *level_data;
 
 Timer timer_level_update;
@@ -52,6 +54,7 @@ struct Player {
   bool has_key;
   uint32_t level;
   bool dead;
+  bool wingame;
 } player;
 
 struct GameSaveData {
@@ -80,8 +83,13 @@ struct CurrentButtonPress {
   uint32_t Y;
 } currentButtonPress;
 
-uint32_t repeat_time = 150; // in ms
-uint32_t hold_time = 250; // in ms
+const uint32_t repeat_time = 150; // in ms
+
+// the unit vector points to (1,0) at 0°, (0,1) at 90° but at 45° it points to (0.71,0.71).
+// since we can't position our character in-between tiles we increase the repeat time a 
+// bit to compensate. Factor 1.414 felt choppy so I settled for 1.2.
+constexpr uint32_t diagonal_repeat_time = round(repeat_time * 1.2);
+const uint32_t hold_time = 250; // in ms
 
 auto leveltick = 0;
 
@@ -398,6 +406,7 @@ void new_game(uint32_t level) {
   player.has_key = false;
   player.score = 0;
   player.dead = false;
+  player.wingame = false;
 
   player.screen_location = Point(screen.bounds.w / 2, screen.bounds.h / 2);
   player.screen_location += Point(1, 1);
@@ -409,7 +418,7 @@ void new_game(uint32_t level) {
 void init() {
   bool success = read_save(gameSaveData);
   if (success) {
-    if (gameSaveData.currentLevel > sizeof(levels) -1) { // cheater!
+    if (gameSaveData.currentLevel > no_of_levels - 1) { // cheater!
       gameSaveData.currentLevel = 0;
     }
     player.level = gameSaveData.currentLevel;
@@ -433,6 +442,16 @@ void init() {
   timer_level_animate.start();
 
   new_game(player.level);
+}
+
+bool detectDiagonal() {
+  auto dpad = buttons & 0b00001111; // get rid of abxy states
+  if (dpad == Button::DPAD_UP || dpad == Button::DPAD_DOWN || dpad == Button::DPAD_LEFT 
+      || dpad == Button::DPAD_RIGHT || dpad == 0) {
+    return false;
+  } else {
+    return true;
+  }
 }
 
 void render(uint32_t time) {
@@ -465,14 +484,20 @@ void render(uint32_t time) {
   screen.rectangle(Rect(0, 0, screen.bounds.w, 10));
   screen.pen = Pen(0, 0, 0);
   screen.text("Level: " + std::to_string(player.level) + " Score: " + std::to_string(player.score), minimal_font, Point(2, 2));
-
   if(player.has_key) {
     screen.sprite(entityType::KEY_SILVER, Point(screen.bounds.w - 10, 1));
+  }
+  if (player.wingame) {
+    screen.pen = Pen(255, 255, 255);
+    screen.text("You ROCK!", minimal_font, Point(40, 52));
+    screen.text("Hold B for new game", minimal_font, Point(12, 68));
   }
 }
 
 void update(uint32_t time) {
   (void)time;
+
+  auto current_repeat_time = detectDiagonal()? diagonal_repeat_time : repeat_time;
 
   Point movement = Point(0, 0);
 
@@ -518,23 +543,23 @@ void update(uint32_t time) {
 
     // repeat à la classic boulder dash
     if(buttons & Button::DPAD_UP) {
-      if ((time - currentButtonPress.DPAD_UP) % repeat_time == 0) {
+      if ((time - currentButtonPress.DPAD_UP) % current_repeat_time == 0) {
         movement.y = -1;
       }
     }
     if(buttons & Button::DPAD_DOWN) {
-      if ((time - currentButtonPress.DPAD_DOWN) % repeat_time == 0) {
+      if ((time - currentButtonPress.DPAD_DOWN) % current_repeat_time == 0) {
         movement.y = 1;
       }
     }
     if(buttons & Button::DPAD_LEFT) {
-      if ((time - currentButtonPress.DPAD_LEFT) % repeat_time == 0) {
+      if ((time - currentButtonPress.DPAD_LEFT) % current_repeat_time == 0) {
         player.facing = false;
         movement.x = -1;
       }
     }
     if(buttons & Button::DPAD_RIGHT) {
-      if ((time - currentButtonPress.DPAD_RIGHT) % repeat_time == 0) {
+      if ((time - currentButtonPress.DPAD_RIGHT) % current_repeat_time == 0) {
         player.facing = true;
         movement.x = 1;
       }      
@@ -586,7 +611,12 @@ void update(uint32_t time) {
         break;
       case STAIRS:
         player.level++;
-        new_game(player.level);
+        if (player.level > no_of_levels - 1) {
+          player.wingame = true;
+          player.dead = true;
+        } else {
+          new_game(player.level);
+        }
         break;
       default:
         break;
